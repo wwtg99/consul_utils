@@ -286,7 +286,3 @@ class DiffCommand(PairedConsulCommand):
         super().__init__(settings, ctx, args)
         if 'with_same' in args and args['with_same']:
             self.settings.set('reporter.show_no_filtered', True)
-
-
-
-

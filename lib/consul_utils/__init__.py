@@ -1,4 +1,4 @@
-__prog__ = 'Consul Utils'
+__prog__ = 'consul_utils'
 __version__ = '0.1.0'
 __author__ = 'wuwentao'
 __author_email__ = 'wwtg99@126.com'
