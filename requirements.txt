@@ -1,0 +1,5 @@
+python-consul
+hsettings
+click
+colorama
+diskcache

@@ -1,0 +1,46 @@
+# consul configuration
+consul:
+  # consul host
+  host: "www.consul.com"
+  # consul port
+  port: 8500
+  # consul scheme
+  scheme: "http"
+  # consul ACL token
+  token: ""
+# default root
+default_root: ""
+# cache configuration
+cache:
+  # cache enabled or not
+  cache_enabled: true
+  # cache file
+  cache_dir: ".consul_cache"
+  # cache expire seconds
+  cache_ttl: 600
+# log configuration
+log:
+  # log level
+  log_level: "INFO"
+# output configuration
+reporter:
+  # result output type, text, json or csv
+  output_type: "text"
+  # result output file, leave empty to print to console
+  output_file: ""
+  # output all scan data
+  show_all_scan: false
+  # output filtered data
+  show_filtered: true
+  # output not filtered data
+  show_no_filtered: false
+  # output flags data
+  show_flags: false
+# search command configuration
+search:
+  # search results limit
+  limit: 10
+  # search fields, keys or values
+  fields: "keys"
+  # use regex for search or not
+  regex: false
