@@ -3,6 +3,9 @@ from .exceptions import FilterStop
 
 
 class BaseFilter:
+    """
+    Base filter class.
+    """
 
     filter_flag = 'default'
 
@@ -13,9 +16,17 @@ class BaseFilter:
         self.results = None
 
     def filter(self, **kwargs) -> bool:
+        """
+        Filter data, return true if data passed filter.
+        """
         return False
 
     def get_results(self):
+        """
+        Get other filter results.
+
+        :return: results
+        """
         return self.results
 
     @property
@@ -27,6 +38,9 @@ class BaseFilter:
 
 
 class OneFilter(BaseFilter):
+    """
+    Base filter for one data.
+    """
 
     def filter_one(self, key, value, index, **kwargs) -> bool:
         return False
@@ -36,6 +50,9 @@ class OneFilter(BaseFilter):
 
 
 class PairedFilter(BaseFilter):
+    """
+    Base filter for paired data.
+    """
 
     def filter_pair(self, key1, value1, key2, value2, index, **kwargs) -> bool:
         return False
@@ -45,12 +62,18 @@ class PairedFilter(BaseFilter):
 
 
 class NoFilter(OneFilter):
+    """
+    All data passed filter.
+    """
 
     def filter_one(self, key, value, index, **kwargs):
         return True
 
 
 class SkipDirectoryFilter(OneFilter):
+    """
+    Filter all directory keys.
+    """
 
     def filter_one(self, key, value, index, **kwargs):
         if key.endswith('/'):
@@ -59,6 +82,9 @@ class SkipDirectoryFilter(OneFilter):
 
 
 class SearchFilter(OneFilter):
+    """
+    Search filter.
+    """
 
     def __init__(self, settings, flag='default'):
         super().__init__(settings, flag)
@@ -101,6 +127,9 @@ class SearchFilter(OneFilter):
 
 
 class DiffFilter(PairedFilter):
+    """
+    Diff filter.
+    """
 
     def filter_pair(self, key1, value1, key2, value2, index, **kwargs) -> bool:
         return value1 != value2

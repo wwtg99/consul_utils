@@ -12,6 +12,9 @@ from .exceptions import ConsulException, FilterStop
 
 
 class BaseConsulCommand:
+    """
+    Base command class.
+    """
 
     filter_class = None
     filter = None
@@ -55,6 +58,9 @@ class BaseConsulCommand:
         self._init_logger()
 
     def parse_config(self):
+        """
+        Parse and generate settings from config_file and args.
+        """
         if 'config_file' in self.args and self.args['config_file']:
             if isinstance(self.args['config_file'], str) and os.path.exists(self.args['config_file']):
                 d = YamlLoader.load(self.args['config_file'])
@@ -75,46 +81,70 @@ class BaseConsulCommand:
                 self._ctx.obj['setting'] = self._settings
 
     def run(self):
+        """
+        Run command.
+        """
         consul = ConsulKvSearch(self.settings)
+        # clear cache if specified
         if 'clear_cache' in self.args and self.args['clear_cache']:
             logging.info('Clear all cache')
             consul.clear_cache()
         root = self.settings.get('default_root', '')
+        # get consul kv
         vals = consul.get(root)
         filtered = []
         no_filtered = []
         flags = {}
+        # init filter
         if self.filter is None and self.filter_class:
             self.filter = self.filter_class(self.settings)
         if isinstance(self.filter, BaseFilter):
             try:
                 for i in range(len(vals)):
                     val = vals[i]
+                    # pass filter
                     if self.filter.filter(key=val['key'], value=val['value'], index=i):
                         filtered.append(val)
                     else:
                         no_filtered.append(val)
             except FilterStop as e:
                 logging.debug(e)
+            # get other filter results
             res = self.filter.get_results()
             if res:
                 flags[self.filter.flag] = res
         else:
             logging.warning('Invalid filter {}'.format(self.filter))
             return self.parse_output({})
+        # build and parse data to reporter
         data = {OUT_ALL_KEY: vals, OUT_FILTERED_KEY: filtered, OUT_NON_FILTERED_KEY: no_filtered, OUT_FLAG_KEY: flags}
         return self.parse_output(data)
 
     def run_and_report(self):
+        """
+        Run command and report.
+        """
         res = self.run()
         out_type = self.settings.get('reporter.output_type', 'text')
         reporter = self.get_reporter(out_type)
         return reporter.report(res)
 
     def parse_output(self, data):
+        """
+        Parse output data.
+
+        :param data:
+        :return: data to report
+        """
         return data
 
     def get_reporter(self, rtype):
+        """
+        Get reporter by output_type.
+
+        :param rtype:
+        :return: Reporter
+        """
         types = {
             'text': TextReporter,
             'json': JsonReporter,
@@ -125,6 +155,11 @@ class BaseConsulCommand:
         raise ConsulException('Invalid output type {}'.format(rtype))
 
     def get_config_mapping(self):
+        """
+        Get args config mapping.
+
+        :return: mapping dict
+        """
         return {
             'host': 'consul.host',
             'port': 'consul.port',
@@ -195,12 +230,20 @@ class BaseConsulCommand:
 
 
 class PairedConsulCommand(BaseConsulCommand):
+    """
+    Base command for paired data.
+    """
 
     def run(self):
+        """
+        Run command.
+        """
+        # get two consul settings
         settings1 = self.get_consul_conf(1)
         settings2 = self.get_consul_conf(2)
         consul1 = ConsulKvSearch(settings1)
         consul2 = ConsulKvSearch(settings2)
+        # clear cache if specified
         if 'clear_cache' in self.args and self.args['clear_cache']:
             logging.info('Clear all cache')
             consul1.clear_cache()
@@ -209,14 +252,28 @@ class PairedConsulCommand(BaseConsulCommand):
             consul2.clear_cache()
         root1 = settings1.get('default_root', '')
         root2 = settings2.get('default_root', '')
+        # get consul kv
         vals1 = consul1.get(root1)
         vals2 = consul2.get(root2)
         vals = []
         filtered = []
         no_filtered = []
         flags = {}
+        # init filter
         if self.filter is None and self.filter_class:
             self.filter = self.filter_class(self.settings)
+        # add data that only exists in one side
+        dt1 = {kv['key'][len(root1):]: kv['value'] for kv in vals1}
+        dt2 = {kv['key'][len(root2):]: kv['value'] for kv in vals2}
+        for k, v in dt1.items():
+            if k not in dt2:
+                vals.append(({'key': k, 'value': v}, {'key': None, 'value': None}))
+                filtered.append(({'key': k, 'value': v}, {'key': None, 'value': None}))
+        for k, v in dt2.items():
+            if k not in dt1:
+                vals.append(({'key': None, 'value': None}, {'key': k, 'value': v}))
+                filtered.append(({'key': None, 'value': None}, {'key': k, 'value': v}))
+        # filter data that exists in both sides
         if isinstance(self.filter, PairedFilter):
             for kv1, kv2 in product(vals1, vals2):
                 k1 = kv1['key'][len(root1):]
@@ -224,6 +281,7 @@ class PairedConsulCommand(BaseConsulCommand):
                 if k1 != k2:
                     continue
                 vals.append((kv1, kv2))
+                # pass filter
                 if self.filter.filter(key1=kv1['key'], value1=kv1['value'], key2=kv2['key'], value2=kv2['value'], index=(len(vals) - 1)):
                     filtered.append((kv1, kv2))
                 else:
@@ -234,6 +292,7 @@ class PairedConsulCommand(BaseConsulCommand):
         else:
             logging.warning('Invalid filter {}'.format(self.filter))
             return self.parse_output({})
+        # build and parse data to reporter
         data = {OUT_ALL_KEY: vals, OUT_FILTERED_KEY: filtered, OUT_NON_FILTERED_KEY: no_filtered, OUT_FLAG_KEY: flags}
         return self.parse_output(data)
 

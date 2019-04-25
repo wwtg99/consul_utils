@@ -10,6 +10,9 @@ def get_consul_client(**kwargs):
 
 
 class ConsulKvSearch:
+    """
+    Search in the consul key value.
+    """
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -55,6 +58,12 @@ class ConsulKvSearch:
         return vals
 
     def get(self, key, **kwargs):
+        """
+        Get key from cache, if not hit in the cache, then find in the consul.
+
+        :param key:
+        :return:
+        """
         if not key:
             key = ''
         if self._cache_enabled:

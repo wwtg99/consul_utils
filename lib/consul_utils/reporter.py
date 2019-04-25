@@ -7,14 +7,28 @@ OUT_FLAG_KEY = 'flags'
 
 
 class ReporterStream:
+    """
+    Base class for report stream.
+    """
 
     def open(self):
+        """
+        Open stream.
+        """
         return self
 
     def append(self, data):
+        """
+        Append data to stream.
+
+        :param data:
+        """
         pass
 
     def close(self):
+        """
+        Close stream.
+        """
         pass
 
     def __enter__(self):
@@ -25,12 +39,18 @@ class ReporterStream:
 
 
 class ConsoleStream(ReporterStream):
+    """
+    Stream to console.
+    """
 
     def append(self, data):
         print(data)
 
 
 class FileStream(ReporterStream):
+    """
+    Stream to file.
+    """
 
     def __init__(self, filepath, mode='w'):
         self._filepath = filepath
@@ -49,11 +69,20 @@ class FileStream(ReporterStream):
 
 
 class BaseReporter:
+    """
+    Base class for reporter.
+    """
 
     def __init__(self, settings):
         self._settings = settings
 
     def trim_data(self, data):
+        """
+        Remove unused data by reporter settings.
+
+        :param data:
+        :return: trimmed data
+        """
         if not self.settings.get('reporter.show_all_scan', False):
             del data[OUT_ALL_KEY]
         if not self.settings.get('reporter.show_filtered', True):
@@ -65,9 +94,21 @@ class BaseReporter:
         return data
 
     def format(self, data, **kwargs):
+        """
+        Format data, yield each data.
+
+        :param data:
+        :return:
+        """
         yield data
 
     def report(self, data, **kwargs):
+        """
+        Report data.
+
+        :param data:
+        :return:
+        """
         data = self.trim_data(data)
         if self.settings.get('reporter.output_file'):
             with FileStream(self.settings.get('reporter.output_file')) as stream:
@@ -84,6 +125,9 @@ class BaseReporter:
 
 
 class TextReporter(BaseReporter):
+    """
+    Text format reporter.
+    """
 
     def format(self, data, **kwargs):
         if OUT_ALL_KEY in data:
@@ -106,10 +150,16 @@ class TextReporter(BaseReporter):
     def to_text(self, d):
         if 'key' in d and 'value' in d:
             return '{}: {}'.format(d['key'], d['value'])
-        return str(d)
+        elif isinstance(d, (tuple, list)):
+            return '---> {}: {}\n<--- {}: {}'.format(d[0]['key'], d[0]['value'], d[1]['key'], d[1]['value'])
+        else:
+            return str(d)
 
 
 class JsonReporter(BaseReporter):
+    """
+    Json format reporter.
+    """
 
     def format(self, data, **kwargs):
         import json
@@ -117,6 +167,9 @@ class JsonReporter(BaseReporter):
 
 
 class CsvReport(BaseReporter):
+    """
+    Csv format reporter.
+    """
 
     def format(self, data, **kwargs):
         if OUT_ALL_KEY in data:
@@ -139,4 +192,7 @@ class CsvReport(BaseReporter):
     def to_csv(self, d):
         if 'key' in d and 'value' in d:
             return '{},{}'.format(d['key'], d['value'])
-        return str(d)
+        elif isinstance(d, (tuple, list)):
+            return '{},{},{},{}'.format(d[0]['key'], d[0]['value'], d[1]['key'], d[1]['value'])
+        else:
+            return str(d)
