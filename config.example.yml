@@ -1,15 +1,15 @@
 # consul configuration
 consul:
   # consul host
-  host: "www.consul.com"
+  host: "test.consul.com"
   # consul port
   port: 8500
   # consul scheme
   scheme: "http"
   # consul ACL token
   token: ""
-# default root
-default_root: ""
+  # default root
+  root: ""
 # cache configuration
 cache:
   # cache enabled or not

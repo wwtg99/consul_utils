@@ -1,12 +1,7 @@
 import logging
 import base64
-from hsettings import Settings
 import consul
 from diskcache import Cache
-
-
-def get_consul_client(**kwargs):
-    return consul.Consul(**kwargs)
 
 
 class ConsulKvSearch:
@@ -14,25 +9,38 @@ class ConsulKvSearch:
     Search in the consul key value.
     """
 
-    def __init__(self, settings: Settings):
-        self._settings = settings
-        self._cache_enabled = bool(settings.get('cache.cache_enabled', True))
-        self._cache_file = settings.get('cache.cache_dir', '.consul_cache')
-        self.cache_ttl = settings.get('cache.cache_ttl', 600)
-        self._client = get_consul_client(**settings.get('consul', {}))
-        self._root = settings.get('default_root', '')
+    def __init__(self, host, port, scheme, token, verify=True, cert=None, root='', cache_enabled=True,
+                 cache_dir='.consul_cache', cache_ttl=600):
+        self._host = host
+        self._port = port
+        self._scheme = scheme
+        self._token = token
+        self._verify = verify
+        self._cert = cert
+        self._cache_enabled = cache_enabled
+        self._cache_dir = cache_dir
+        self.cache_ttl = cache_ttl
+        self._root = root
+        self._client = consul.Consul(host=host, port=port, token=token, scheme=scheme, verify=verify, cert=cert)
 
     def get_cache(self, key, default=None, expire_time=False):
-        with Cache(self._cache_file) as ref:
-            return ref.get(key=self._get_cache_key(key), default=default, expire_time=expire_time)
+        if self._cache_enabled:
+            return self.cache.get(key=self._get_cache_key(key), default=default, expire_time=expire_time)
+        return None
 
     def set_cache(self, key, value, expire):
-        with Cache(self._cache_file) as ref:
-            ref.set(key=self._get_cache_key(key), value=value, expire=expire)
+        if self._cache_enabled:
+            return self.cache.set(key=self._get_cache_key(key), value=value, expire=expire)
+        return False
+
+    def del_cache(self, key):
+        if self._cache_enabled:
+            return self.cache.delete(key=self._get_cache_key(key))
+        return True
 
     def clear_cache(self):
-        with Cache(self._cache_file) as ref:
-            ref.clear()
+        if self._cache_enabled:
+            self.cache.clear()
 
     def get_key(self, key, recurse=True, raw=False, keys=False, **kwargs):
         """
@@ -76,14 +84,33 @@ class ConsulKvSearch:
         self.set_cache(key=key, value=vals, expire=self.cache_ttl)
         return vals
 
+    def put(self, key, value, **kwargs):
+        """
+        Put key value in consul and cache if enabled.
+
+        :param key:
+        :param value:
+        :param kwargs:
+        :return:
+        """
+        res = self._client.kv.put(key=key, value=value, **kwargs)
+        return res
+
+    def delete(self, key, recurse=None, **kwargs):
+        res = self._client.kv.delete(key=key, recurse=recurse, **kwargs)
+        if self._cache_enabled:
+            self.del_cache(key=key)
+        return res
+
     def _get_cache_key(self, field) -> str:
         return base64.b64encode(':'.join([
-            str(self.settings.get('consul.host', '')),
-            str(self.settings.get('consul.port', 80)),
+            str(self._host),
+            str(self._port),
             str(self._root),
             str(field)
         ]).encode('utf-8'))
 
     @property
-    def settings(self) -> Settings:
-        return self._settings
+    def cache(self) -> Cache:
+        with Cache(self._cache_dir) as ref:
+            return ref

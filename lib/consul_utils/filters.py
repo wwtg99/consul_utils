@@ -12,7 +12,6 @@ class BaseFilter:
     def __init__(self, settings, flag='default'):
         self._settings = settings
         self.flag = flag or self.filter_flag
-        self._params = {}
         self.results = None
 
     def filter(self, **kwargs) -> bool:

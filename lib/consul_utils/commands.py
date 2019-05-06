@@ -16,16 +16,14 @@ class BaseConsulCommand:
     Base command class.
     """
 
-    filter_class = None
-    filter = None
     default_config = {
         'consul': {
             'host': '',
             'port': 8500,
             'scheme': 'http',
             'token': '',
+            'root': ''
         },
-        'default_root': '',
         'cache': {
             'cache_enabled': True,
             'cache_dir': '.consul_cache',
@@ -53,9 +51,43 @@ class BaseConsulCommand:
         self._settings = settings or Settings(self.default_config)
         self._ctx = ctx
         self.args = args
+        self._client = None
         self._console_handlers = []
         self.parse_config()
         self._init_logger()
+
+    def get_consul_search_client(self, **kwargs):
+        conf = {
+            'host': self.settings.get('consul.host'),
+            'port': self.settings.get('consul.port'),
+            'scheme': self.settings.get('consul.scheme'),
+            'token': self.settings.get('consul.token'),
+            'root': self.settings.get('consul.root'),
+            'cache_enabled': self.settings.get('cache.cache_enabled'),
+            'cache_dir': self.settings.get('cache.cache_dir'),
+            'cache_ttl': self.settings.get('cache.cache_ttl')
+        }
+        if kwargs:
+            conf.update(kwargs)
+        conf = {k: v for k, v in conf.items() if v is not None}
+        return ConsulKvSearch(**conf)
+
+    def run(self):
+        """
+        Run command
+
+        :return:
+        """
+        return self.parse_output({})
+
+    def parse_output(self, data):
+        """
+        Parse output data.
+
+        :param data:
+        :return: data to report
+        """
+        return data
 
     def parse_config(self):
         """
@@ -80,46 +112,6 @@ class BaseConsulCommand:
             if self._ctx:
                 self._ctx.obj['setting'] = self._settings
 
-    def run(self):
-        """
-        Run command.
-        """
-        consul = ConsulKvSearch(self.settings)
-        # clear cache if specified
-        if 'clear_cache' in self.args and self.args['clear_cache']:
-            logging.info('Clear all cache')
-            consul.clear_cache()
-        root = self.settings.get('default_root', '')
-        # get consul kv
-        vals = consul.get(root)
-        filtered = []
-        no_filtered = []
-        flags = {}
-        # init filter
-        if self.filter is None and self.filter_class:
-            self.filter = self.filter_class(self.settings)
-        if isinstance(self.filter, BaseFilter):
-            try:
-                for i in range(len(vals)):
-                    val = vals[i]
-                    # pass filter
-                    if self.filter.filter(key=val['key'], value=val['value'], index=i):
-                        filtered.append(val)
-                    else:
-                        no_filtered.append(val)
-            except FilterStop as e:
-                logging.debug(e)
-            # get other filter results
-            res = self.filter.get_results()
-            if res:
-                flags[self.filter.flag] = res
-        else:
-            logging.warning('Invalid filter {}'.format(self.filter))
-            return self.parse_output({})
-        # build and parse data to reporter
-        data = {OUT_ALL_KEY: vals, OUT_FILTERED_KEY: filtered, OUT_NON_FILTERED_KEY: no_filtered, OUT_FLAG_KEY: flags}
-        return self.parse_output(data)
-
     def run_and_report(self):
         """
         Run command and report.
@@ -128,15 +120,6 @@ class BaseConsulCommand:
         out_type = self.settings.get('reporter.output_type', 'text')
         reporter = self.get_reporter(out_type)
         return reporter.report(res)
-
-    def parse_output(self, data):
-        """
-        Parse output data.
-
-        :param data:
-        :return: data to report
-        """
-        return data
 
     def get_reporter(self, rtype):
         """
@@ -165,8 +148,8 @@ class BaseConsulCommand:
             'port': 'consul.port',
             'scheme': 'consul.scheme',
             'token': 'consul.token',
+            'root': 'consul.root',
             'log_level': 'log.log_level',
-            'root': 'default_root',
             'output_type': 'reporter.output_type',
             'output_file': 'reporter.output_file',
         }
@@ -229,20 +212,85 @@ class BaseConsulCommand:
         return self.__class__.__name__
 
 
-class PairedConsulCommand(BaseConsulCommand):
-    """
-    Base command for paired data.
-    """
+class FilterCommand(BaseConsulCommand):
+
+    filter_class = None
+    filter = None
 
     def run(self):
         """
         Run command.
+
+        Command workflow is
+        1. connect to consul by host and port
+        2. clear cache if set --clear-cache
+        3. get key values from consul under root key
+        4. pass each key value pairs through filter
+        5. return all scan data, filtered data, non-filtered data and other data from filter
+        """
+        consul = self.get_consul_search_client()
+        # clear cache if specified
+        if 'clear_cache' in self.args and self.args['clear_cache']:
+            logging.info('Clear all cache')
+            consul.clear_cache()
+        root = self.settings.get('consul.root', '')
+        # get consul kv
+        vals = consul.get(root)
+        filtered = []
+        no_filtered = []
+        flags = {}
+        # init filter
+        if self.filter is None and self.filter_class:
+            self.filter = self.filter_class(self.settings)
+        if isinstance(self.filter, BaseFilter):
+            try:
+                if vals is None:
+                    logging.warning('There is no keys in Consul.')
+                    return
+                for i in range(len(vals)):
+                    val = vals[i]
+                    # pass filter
+                    if self.filter.filter(key=val['key'], value=val['value'], index=i):
+                        filtered.append(val)
+                    else:
+                        no_filtered.append(val)
+            except FilterStop as e:
+                logging.debug(e)
+            # get other filter results
+            res = self.filter.get_results()
+            if res:
+                flags[self.filter.flag] = res
+        else:
+            logging.warning('Invalid filter {}'.format(self.filter))
+            return self.parse_output({})
+        # build and parse data to reporter
+        data = {OUT_ALL_KEY: vals, OUT_FILTERED_KEY: filtered, OUT_NON_FILTERED_KEY: no_filtered, OUT_FLAG_KEY: flags}
+        return self.parse_output(data)
+
+
+class PairedFilterCommand(BaseConsulCommand):
+    """
+    Base command for paired data.
+    """
+
+    filter_class = None
+    filter = None
+
+    def run(self):
+        """
+        Run command.
+
+        Command workflow is
+        1. connect two consul by host and port
+        2. clear cache if set --clear-cache
+        3. get key values from consul under root key
+        4. compare and get key values that only exists in one side
+        5. pass related key value pairs through paired filter
+        6. return all scan data, filtered data, non-filtered data and other data from filter
         """
         # get two consul settings
-        settings1 = self.get_consul_conf(1)
-        settings2 = self.get_consul_conf(2)
-        consul1 = ConsulKvSearch(settings1)
-        consul2 = ConsulKvSearch(settings2)
+        consul1 = self.get_consul_client(1)
+        consul2 = self.get_consul_client(2)
         # clear cache if specified
         if 'clear_cache' in self.args and self.args['clear_cache']:
             logging.info('Clear all cache')
@@ -250,8 +298,8 @@ class PairedConsulCommand(BaseConsulCommand):
         if 'clear_cache' in self.args and self.args['clear_cache']:
             logging.info('Clear all cache')
             consul2.clear_cache()
-        root1 = settings1.get('default_root', '')
-        root2 = settings2.get('default_root', '')
+        root1 = self._get_conf_n(1, 'root')
+        root2 = self._get_conf_n(2, 'root')
         # get consul kv
         vals1 = consul1.get(root1)
         vals2 = consul2.get(root2)
@@ -296,33 +344,29 @@ class PairedConsulCommand(BaseConsulCommand):
         data = {OUT_ALL_KEY: vals, OUT_FILTERED_KEY: filtered, OUT_NON_FILTERED_KEY: no_filtered, OUT_FLAG_KEY: flags}
         return self.parse_output(data)
 
-    def get_consul_conf(self, n):
-        settings = self.settings.clone()
+    def get_consul_client(self, n):
         n = str(n)
-        if 'host' + n in self.args and self.args['host' + n]:
-            host = self.args['host' + n]
-            settings.set('consul.host', host)
-        if 'port' + n in self.args and self.args['port' + n]:
-            port = self.args['port' + n]
-            settings.set('consul.port', port)
-        if 'scheme' + n in self.args and self.args['scheme' + n]:
-            scheme = self.args['scheme' + n]
-            settings.set('consul.scheme', scheme)
-        if 'token' + n in self.args and self.args['token' + n]:
-            token = self.args['token' + n]
-            settings.set('consul.token', token)
-        if 'root' + n in self.args and self.args['root' + n]:
-            root = self.args['root' + n]
-            settings.set('default_root', root)
-        return settings
+        conf = {}
+        keys = ['host', 'port', 'scheme', 'token', 'root']
+        for k in keys:
+            v = self._get_conf_n(n, k)
+            if v:
+                conf[k] = v
+        return self.get_consul_search_client(**conf)
+
+    def _get_conf_n(self, n, key):
+        newkey = key + n
+        if newkey in self.args and self.args[newkey]:
+            return self.args[newkey]
+        return None
 
 
-class DumpCommand(BaseConsulCommand):
+class DumpCommand(FilterCommand):
 
     filter_class = SkipDirectoryFilter
 
 
-class SearchCommand(BaseConsulCommand):
+class SearchCommand(FilterCommand):
 
     filter_class = SearchFilter
 
@@ -337,7 +381,53 @@ class SearchCommand(BaseConsulCommand):
         return m
 
 
-class DiffCommand(PairedConsulCommand):
+class CopyCommand(FilterCommand):
+
+    filter_class = SkipDirectoryFilter
+
+    COPY_FLAG = 'copy'
+
+    def parse_output(self, data):
+        root = self.args['root']
+        troot = self.args['target_root']
+        target_consul = self._get_target_client()
+        copy_keys = []
+        if 'filtered' in data:
+            for d in data['filtered']:
+                if 'key' in d and 'value' in d:
+                    newkey = troot + d['key'][len(root):]
+                    target_consul.put(key=newkey, value=d['value'])
+                    copy_keys.append({'key': newkey, 'value': d['value']})
+                    logging.info('Copy key from {} to {}'.format(d['key'], newkey))
+                else:
+                    logging.warning('Skip invalid data to put {}'.format(d))
+        else:
+            logging.warning('No filtered data!')
+        data[OUT_FLAG_KEY][self.COPY_FLAG] = copy_keys
+        return data
+
+    def get_config_mapping(self):
+        m = super().get_config_mapping()
+        m.update({
+            'target_root': 'target_root',
+        })
+        return m
+
+    def _get_target_client(self):
+        conf = {}
+        keys = ['host', 'port', 'scheme', 'token', 'root']
+        for k in keys:
+            newkey = 'target_' + k
+            if newkey in self.args and self.args[newkey]:
+                v = self.args[newkey]
+            else:
+                v = None
+            if v:
+                conf[k] = v
+        return self.get_consul_search_client(**conf)
+
+
+class DiffCommand(PairedFilterCommand):
 
     filter_class = DiffFilter
 

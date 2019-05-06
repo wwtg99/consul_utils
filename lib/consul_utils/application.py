@@ -43,6 +43,26 @@ def dump(ctx, **kwargs):
     run_command(DumpCommand, ctx, kwargs)
 
 
+@cli.command(short_help='Copy key from source to target')
+@click.option('--log-level', help='log level')
+@click.option('-c', '--config-file', help='Config file path', type=click.File('r'))
+@click.option('-h', '--host', help='Consul host')
+@click.option('-p', '--port', help='Consul port', type=int)
+@click.option('--scheme', help='Consul scheme')
+@click.option('-t', '--token', help='Consul ACL token')
+@click.option('-r', '--root', help='Search root for consul', required=True)
+@click.option('-x', '--output-type', help='Output type, text, csv or json', type=click.Choice(['text', 'json', 'csv']))
+@click.option('-o', '--output-file', help='Output file path')
+@click.option('--clear-cache', help='Clear cache before search', default=False, is_flag=True)
+@click.option('--target-root', help='Target copy root for consul', required=True)
+@click.pass_context
+def copy(ctx, **kwargs):
+    """
+    Copy consul keys from source to target.
+    """
+    run_command(CopyCommand, ctx, kwargs)
+
+
 @cli.command(short_help='Search in the consul key values')
 @click.option('--log-level', help='log level')
 @click.option('-c', '--config-file', help='Config file path', type=click.File('r'))
@@ -54,7 +74,7 @@ def dump(ctx, **kwargs):
 @click.option('-x', '--output-type', help='Output type, text, csv or json', type=click.Choice(['text', 'json', 'csv']))
 @click.option('-o', '--output-file', help='Output file path')
 @click.option('--clear-cache', help='Clear cache before search', default=False, is_flag=True)
-@click.option('-q', '--query', help='Search query string')
+@click.option('-q', '--query', help='Search query string', required=True)
 @click.option('-e/ ', '--regex/--no-regex', help='Search query using regex or not', default=False)
 @click.option('-f', '--fields', help='Search fields, keys or values', type=click.Choice(['keys', 'values']))
 @click.option('-l', '--limit', help='Search output result limit')
