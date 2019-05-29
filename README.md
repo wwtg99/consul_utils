@@ -151,6 +151,16 @@ Compare key values from two different host. If not specified, will use the defau
 consul_utils diff -c config.yml --host1 test1.consul.com --root1 test1/aa --host2 test2.consul.com --root2 test2/bb
 ```
 
+# Tests
+
+Prepare a consul node at http://test.consul.com:8500 (you can change hosts file).
+
+install pytest and run by pytest
+
+```
+pytest
+```
+
 # Authors
 
 Wu Wentao

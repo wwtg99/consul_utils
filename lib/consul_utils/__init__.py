@@ -1,5 +1,5 @@
 __prog__ = 'consul_utils'
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 __author__ = 'wuwentao'
 __author_email__ = 'wwtg99@126.com'
 __descr__ = 'Useful tools to handle Consul.'
